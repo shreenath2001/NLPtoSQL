@@ -11,6 +11,7 @@
 </head>
 <body>
     <div class="app-container">
+        <div id="sidebar-overlay" class="sidebar-overlay"></div>
         <!-- Sidebar for DB Schema & Info -->
         <aside class="sidebar glass-panel">
             <div class="sidebar-header">
@@ -65,6 +66,14 @@
 
         <!-- Main Workspace -->
         <main class="workspace">
+            <header class="mobile-header">
+                <h2>Data<span class="gradient-text">Nexus</span></h2>
+                <button id="mobile-menu-btn" class="icon-btn">
+                    <svg fill="white" viewBox="0 0 24 24" width="28" height="28">
+                        <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+                    </svg>
+                </button>
+            </header>
             <div class="chat-container glass-panel">
                 <div id="chat-history" class="chat-history">
                     <div class="message system">

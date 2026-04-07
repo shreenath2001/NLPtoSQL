@@ -6,6 +6,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnText = document.querySelector('.btn-text');
     const loader = document.querySelector('.loader');
 
+    // Mobile Sidebar Elements
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    const sidebar = document.querySelector('.sidebar');
+
+    function toggleSidebar() {
+        if(sidebar && sidebarOverlay) {
+            sidebar.classList.toggle('active');
+            sidebarOverlay.classList.toggle('active');
+        }
+    }
+
+    if (mobileMenuBtn && sidebarOverlay) {
+        mobileMenuBtn.addEventListener('click', toggleSidebar);
+        sidebarOverlay.addEventListener('click', toggleSidebar);
+    }
+
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         
