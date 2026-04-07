@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NL to SQL Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar for DB Schema & Info -->
+        <aside class="sidebar glass-panel">
+            <div class="sidebar-header">
+                <h2>Data<span class="gradient-text">Nexus</span></h2>
+                <p>Natural Language Database Assistant</p>
+            </div>
+            
+            <div class="schema-viewer">
+                <h3>Database Schema</h3>
+                <div class="table-list">
+                    <div class="table-card">
+                        <h4>users</h4>
+                        <ul>
+                            <li><span class="type">PK</span> id</li>
+                            <li><span class="type">STR</span> name</li>
+                            <li><span class="type">STR</span> email</li>
+                            <li><span class="type">DATE</span> signup_date</li>
+                        </ul>
+                    </div>
+                    <div class="table-card">
+                        <h4>products</h4>
+                        <ul>
+                            <li><span class="type">PK</span> id</li>
+                            <li><span class="type">STR</span> name</li>
+                            <li><span class="type">STR</span> category</li>
+                            <li><span class="type">REAL</span> price</li>
+                        </ul>
+                    </div>
+                    <div class="table-card">
+                        <h4>orders</h4>
+                        <ul>
+                            <li><span class="type">PK</span> id</li>
+                            <li><span class="type">FK</span> user_id</li>
+                            <li><span class="type">DATE</span> order_date</li>
+                            <li><span class="type">REAL</span> total_amount</li>
+                            <li><span class="type">STR</span> status</li>
+                        </ul>
+                    </div>
+                    <div class="table-card">
+                        <h4>order_items</h4>
+                        <ul>
+                            <li><span class="type">PK</span> id</li>
+                            <li><span class="type">FK</span> order_id</li>
+                            <li><span class="type">FK</span> product_id</li>
+                            <li><span class="type">INT</span> quantity</li>
+                            <li><span class="type">REAL</span> price_at_purchase</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <main class="workspace">
+            <div class="chat-container glass-panel">
+                <div id="chat-history" class="chat-history">
+                    <div class="message system">
+                        <div class="bubble">
+                            <strong>System:</strong> Welcome! Ask me any question about your data. For example, <em>"Show me all the users who signed up in March"</em> or <em>"What is the total revenue from laptops?"</em>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <form id="query-form" class="query-form">
+                        <input type="text" id="nl-input" class="modern-input" placeholder="Ask a question about the database..." autocomplete="off" required />
+                        <button type="submit" class="primary-btn glow-effect" id="submit-btn">
+                            <span class="btn-text">Generate SQL</span>
+                            <span class="loader hidden"></span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

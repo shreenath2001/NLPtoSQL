@@ -1,0 +1,14 @@
+# Ignore virtual environment folders
+venv/
+env/
+.env
+
+# Cache directories
+__pycache__/
+*.pyc
+
+# Local Database
+ecommerce.db
+
+# Ignore Git directory
+.git/

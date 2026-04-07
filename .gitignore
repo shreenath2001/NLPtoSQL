@@ -1,0 +1,13 @@
+# Environments
+venv/
+env/
+
+# Secrets
+.env
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Database
+ecommerce.db
