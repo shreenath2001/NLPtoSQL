@@ -41,7 +41,11 @@ class QueryResponse(BaseModel):
 import re
 
 def is_valid_custom_schema_script(script: str) -> bool:
-    statements = [stmt.strip() for stmt in script.split(';') if stmt.strip()]
+    # Remove single-line and multi-line comments before passing validation
+    script_clean = re.sub(r'--.*', '', script)
+    script_clean = re.sub(r'/\*.*?\*/', '', script_clean, flags=re.DOTALL)
+    
+    statements = [stmt.strip() for stmt in script_clean.split(';') if stmt.strip()]
     if not statements:
         return False
     
@@ -52,7 +56,8 @@ def is_valid_custom_schema_script(script: str) -> bool:
     ]
     
     for stmt in statements:
-        if not (stmt.upper().startswith("CREATE") or stmt.upper().startswith("INSERT")):
+        upper_stmt = stmt.upper()
+        if not (upper_stmt.startswith("CREATE") or upper_stmt.startswith("INSERT")):
             return False
             
         for forbidden in forbidden_keywords:
@@ -120,17 +125,23 @@ def create_schema(req: SchemaCreateRequest):
     if os.path.exists(db_path):
         raise HTTPException(status_code=400, detail=f"Schema '{req.name}' already exists.")
         
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.executescript(req.sql_script)
         conn.commit()
-        conn.close()
         return {"message": f"Schema '{req.name}' created successfully."}
     except Exception as e:
+        if conn:
+            conn.close()
+            conn = None
         if os.path.exists(db_path):
             os.remove(db_path)
         raise HTTPException(status_code=400, detail=f"Error executing schema script: {str(e)}")
+    finally:
+        if conn:
+            conn.close()
 
 @app.get("/api/schema/{name}")
 def get_schema_info(name: str):
