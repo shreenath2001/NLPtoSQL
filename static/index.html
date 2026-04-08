@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NL to SQL Assistant</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css?v=2">
 </head>
+
 <body>
     <div class="app-container">
         <div id="sidebar-overlay" class="sidebar-overlay"></div>
@@ -18,13 +22,13 @@
                 <h2>Data<span class="gradient-text">Nexus</span></h2>
                 <p>Natural Language Database Assistant</p>
             </div>
-            
+
             <div class="schema-viewer">
                 <div class="schema-viewer-header">
                     <h3>Database</h3>
                     <button id="add-schema-btn" class="add-btn" title="Add Schema">
                         <svg fill="currentColor" viewBox="0 0 24 24" width="20" height="20">
-                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
                         </svg>
                     </button>
                 </div>
@@ -45,7 +49,7 @@
                 <h2>Data<span class="gradient-text">Nexus</span></h2>
                 <button id="mobile-menu-btn" class="icon-btn">
                     <svg fill="white" viewBox="0 0 24 24" width="28" height="28">
-                        <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+                        <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
                     </svg>
                 </button>
             </header>
@@ -53,14 +57,17 @@
                 <div id="chat-history" class="chat-history">
                     <div class="message system">
                         <div class="bubble">
-                            <strong>System:</strong> Welcome! Ask me any question about your data. For example, <em>"Show me all the users who signed up in March"</em> or <em>"What is the total revenue from laptops?"</em>
+                            <strong>System:</strong> Welcome! Ask me any question about your data. For example,
+                            <em>"Show me all the users who signed up in March"</em> or <em>"What is the total revenue
+                                from laptops?"</em>
                         </div>
                     </div>
                 </div>
 
                 <div class="input-area">
                     <form id="query-form" class="query-form">
-                        <input type="text" id="nl-input" class="modern-input" placeholder="Ask a question about the database..." autocomplete="off" required />
+                        <input type="text" id="nl-input" class="modern-input"
+                            placeholder="Ask a question about the database..." autocomplete="off" required />
                         <button type="submit" class="primary-btn glow-effect" id="submit-btn">
                             <span class="btn-text">Generate SQL</span>
                             <span class="loader hidden"></span>
@@ -81,11 +88,13 @@
             <form id="schema-form" class="schema-form">
                 <div class="form-group">
                     <label for="schema-name">Schema Name</label>
-                    <input type="text" id="schema-name" class="modern-input" required pattern="^[a-zA-Z0-9_]+$" title="Only letters, numbers, and underscores allowed" placeholder="e.g. hr_database" />
+                    <input type="text" id="schema-name" class="modern-input" required pattern="^[a-zA-Z0-9_]+$"
+                        title="Only letters, numbers, and underscores allowed" placeholder="e.g. hr_database" />
                 </div>
                 <div class="form-group">
                     <label for="schema-script">SQL Script (CREATE & INSERT)</label>
-                    <textarea id="schema-script" class="modern-input" rows="8" required placeholder="CREATE TABLE employees (id INT);\nINSERT INTO employees VALUES (1);"></textarea>
+                    <textarea id="schema-script" class="modern-input" rows="8" required
+                        placeholder="CREATE TABLE employees (id INT);\nINSERT INTO employees VALUES (1);"></textarea>
                 </div>
                 <div id="schema-error" class="error-text hidden"></div>
                 <div class="modal-actions">
@@ -98,7 +107,8 @@
             </form>
         </div>
     </div>
-    
-    <script src="/static/js/app.js"></script>
+
+    <script src="/static/js/app.js?v=2"></script>
 </body>
+
 </html>
