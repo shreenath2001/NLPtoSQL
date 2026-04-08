@@ -20,46 +20,21 @@
             </div>
             
             <div class="schema-viewer">
-                <h3>Database Schema</h3>
-                <div class="table-list">
-                    <div class="table-card">
-                        <h4>users</h4>
-                        <ul>
-                            <li><span class="type">PK</span> id</li>
-                            <li><span class="type">STR</span> name</li>
-                            <li><span class="type">STR</span> email</li>
-                            <li><span class="type">DATE</span> signup_date</li>
-                        </ul>
-                    </div>
-                    <div class="table-card">
-                        <h4>products</h4>
-                        <ul>
-                            <li><span class="type">PK</span> id</li>
-                            <li><span class="type">STR</span> name</li>
-                            <li><span class="type">STR</span> category</li>
-                            <li><span class="type">REAL</span> price</li>
-                        </ul>
-                    </div>
-                    <div class="table-card">
-                        <h4>orders</h4>
-                        <ul>
-                            <li><span class="type">PK</span> id</li>
-                            <li><span class="type">FK</span> user_id</li>
-                            <li><span class="type">DATE</span> order_date</li>
-                            <li><span class="type">REAL</span> total_amount</li>
-                            <li><span class="type">STR</span> status</li>
-                        </ul>
-                    </div>
-                    <div class="table-card">
-                        <h4>order_items</h4>
-                        <ul>
-                            <li><span class="type">PK</span> id</li>
-                            <li><span class="type">FK</span> order_id</li>
-                            <li><span class="type">FK</span> product_id</li>
-                            <li><span class="type">INT</span> quantity</li>
-                            <li><span class="type">REAL</span> price_at_purchase</li>
-                        </ul>
-                    </div>
+                <div class="schema-viewer-header">
+                    <h3>Database</h3>
+                    <button id="add-schema-btn" class="add-btn" title="Add Schema">
+                        <svg fill="currentColor" viewBox="0 0 24 24" width="20" height="20">
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="schema-selector">
+                    <select id="schema-dropdown" class="modern-select">
+                        <option value="ecommerce">ecommerce</option>
+                    </select>
+                </div>
+                <div id="schema-table-list" class="table-list">
+                    <!-- Dynamic rendering here -->
                 </div>
             </div>
         </aside>
@@ -94,6 +69,34 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Add Schema Modal -->
+    <div id="schema-modal" class="modal-overlay hidden">
+        <div class="modal-container glass-panel">
+            <div class="modal-header">
+                <h2>Add Custom Schema</h2>
+                <button id="close-modal-btn" class="icon-btn">&times;</button>
+            </div>
+            <form id="schema-form" class="schema-form">
+                <div class="form-group">
+                    <label for="schema-name">Schema Name</label>
+                    <input type="text" id="schema-name" class="modern-input" required pattern="^[a-zA-Z0-9_]+$" title="Only letters, numbers, and underscores allowed" placeholder="e.g. hr_database" />
+                </div>
+                <div class="form-group">
+                    <label for="schema-script">SQL Script (CREATE & INSERT)</label>
+                    <textarea id="schema-script" class="modern-input" rows="8" required placeholder="CREATE TABLE employees (id INT);\nINSERT INTO employees VALUES (1);"></textarea>
+                </div>
+                <div id="schema-error" class="error-text hidden"></div>
+                <div class="modal-actions">
+                    <button type="button" class="secondary-btn" id="cancel-schema-btn">Cancel</button>
+                    <button type="submit" class="primary-btn glow-effect" id="save-schema-btn">
+                        <span class="btn-text">Save Schema</span>
+                        <span class="loader hidden" id="schema-loader"></span>
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
     
     <script src="/static/js/app.js"></script>

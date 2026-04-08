@@ -1,10 +1,27 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Elements ---
     const form = document.getElementById('query-form');
     const input = document.getElementById('nl-input');
     const chatHistory = document.getElementById('chat-history');
     const submitBtn = document.getElementById('submit-btn');
     const btnText = document.querySelector('.btn-text');
     const loader = document.querySelector('.loader');
+
+    // Schema Elements
+    const schemaDropdown = document.getElementById('schema-dropdown');
+    const schemaTableList = document.getElementById('schema-table-list');
+    
+    // Modal Elements
+    const addSchemaBtn = document.getElementById('add-schema-btn');
+    const schemaModal = document.getElementById('schema-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const cancelSchemaBtn = document.getElementById('cancel-schema-btn');
+    const schemaForm = document.getElementById('schema-form');
+    const schemaNameInput = document.getElementById('schema-name');
+    const schemaScriptInput = document.getElementById('schema-script');
+    const schemaError = document.getElementById('schema-error');
+    const saveSchemaBtn = document.getElementById('save-schema-btn');
+    const schemaLoader = document.getElementById('schema-loader');
 
     // Mobile Sidebar Elements
     const mobileMenuBtn = document.getElementById('mobile-menu-btn');
@@ -23,27 +40,87 @@ document.addEventListener('DOMContentLoaded', () => {
         sidebarOverlay.addEventListener('click', toggleSidebar);
     }
 
+    // --- Init ---
+    loadSchemas();
+
+    // --- Event Listeners ---
+    schemaDropdown.addEventListener('change', () => {
+        loadSchemaInfo(schemaDropdown.value);
+    });
+
+    addSchemaBtn.addEventListener('click', () => {
+        schemaModal.classList.remove('hidden');
+        schemaError.classList.add('hidden');
+        schemaForm.reset();
+    });
+
+    closeModalBtn.addEventListener('click', () => {
+        schemaModal.classList.add('hidden');
+    });
+
+    if (cancelSchemaBtn) {
+        cancelSchemaBtn.addEventListener('click', () => {
+            schemaModal.classList.add('hidden');
+        });
+    }
+
+    schemaForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const name = schemaNameInput.value.trim();
+        const sql_script = schemaScriptInput.value.trim();
+        
+        if (!name || !sql_script) return;
+
+        // Set Loading
+        saveSchemaBtn.disabled = true;
+        schemaLoader.classList.remove('hidden');
+        schemaError.classList.add('hidden');
+
+        try {
+            const res = await fetch('/api/schemas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, sql_script })
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                schemaModal.classList.add('hidden');
+                await loadSchemas(name); // reload list and select the new one
+            } else {
+                schemaError.textContent = data.detail || 'Failed to add schema';
+                schemaError.classList.remove('hidden');
+            }
+        } catch (err) {
+            schemaError.textContent = 'Network error while adding schema';
+            schemaError.classList.remove('hidden');
+        } finally {
+            saveSchemaBtn.disabled = false;
+            schemaLoader.classList.add('hidden');
+        }
+    });
+
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         
         const query = input.value.trim();
-        if (!query) return;
+        const schema_name = schemaDropdown.value;
+        if (!query || !schema_name) return;
 
-        // 1. Add User Message
         appendMessage('user', query);
         input.value = '';
 
-        // 2. Disable input & show loading
         setLoadingState(true);
 
-        // 3. Make API call
         try {
             const response = await fetch('/api/query', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ query })
+                body: JSON.stringify({ query, schema_name })
             });
 
             const data = await response.json();
@@ -61,6 +138,78 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- Helper Functions ---
+
+    async function loadSchemas(selectedName = 'ecommerce') {
+        try {
+            const res = await fetch('/api/schemas');
+            const data = await res.json();
+            
+            schemaDropdown.innerHTML = '';
+            data.schemas.forEach(schema => {
+                const opt = document.createElement('option');
+                opt.value = schema;
+                opt.textContent = schema;
+                schemaDropdown.appendChild(opt);
+            });
+
+            if (data.schemas.includes(selectedName)) {
+                schemaDropdown.value = selectedName;
+            } else if (data.schemas.length > 0) {
+                schemaDropdown.value = data.schemas[0];
+            }
+
+            if (schemaDropdown.value) {
+                loadSchemaInfo(schemaDropdown.value);
+            }
+        } catch (e) {
+            console.error("Failed to load schemas", e);
+        }
+    }
+
+    async function loadSchemaInfo(name) {
+        schemaTableList.innerHTML = '<div style="padding:10px;text-align:center;">Loading schema...</div>';
+        try {
+            const res = await fetch(`/api/schema/${name}`);
+            const data = await res.json();
+            
+            if (res.ok) {
+                renderSchemaSidebar(data.tables);
+            } else {
+                schemaTableList.innerHTML = `<div class="error-text">Failed to load schema</div>`;
+            }
+        } catch (e) {
+            schemaTableList.innerHTML = `<div class="error-text">Network error</div>`;
+        }
+    }
+
+    function renderSchemaSidebar(tables) {
+        schemaTableList.innerHTML = '';
+        if (!tables || tables.length === 0) {
+            schemaTableList.innerHTML = '<div style="padding:10px;text-align:center;font-size:0.9rem;opacity:0.7">No tables found.</div>';
+            return;
+        }
+
+        tables.forEach(table => {
+            const card = document.createElement('div');
+            card.className = 'table-card';
+            
+            const h4 = document.createElement('h4');
+            h4.textContent = table.name;
+            card.appendChild(h4);
+
+            const ul = document.createElement('ul');
+            table.columns.forEach(col => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span class="type">${col.type}</span> ${col.name}`;
+                ul.appendChild(li);
+            });
+
+            card.appendChild(ul);
+            schemaTableList.appendChild(card);
+        });
+    }
+
     function appendMessage(role, contentHTML) {
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${role}`;
@@ -69,9 +218,9 @@ document.addEventListener('DOMContentLoaded', () => {
         bubbleDiv.className = 'bubble';
         
         if (role === 'user') {
-            bubbleDiv.textContent = contentHTML; // Plain text
+            bubbleDiv.textContent = contentHTML;
         } else {
-            bubbleDiv.innerHTML = contentHTML; // HTML for tables/formatted SQL
+            bubbleDiv.innerHTML = contentHTML;
         }
         
         msgDiv.appendChild(bubbleDiv);
@@ -82,24 +231,19 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderAssistantResponse(data) {
         let htmlContent = '';
 
-        // Add SQL snippet
         htmlContent += `<div class="sql-query">${data.sql_query}</div>`;
 
-        // Add Datatable
         if (data.results && data.results.length > 0) {
             let tableHtml = `<div class="data-table-container"><table class="data-table"><thead><tr>`;
             
-            // Headers
             data.columns.forEach(col => {
                 tableHtml += `<th>${col}</th>`;
             });
             tableHtml += `</tr></thead><tbody>`;
 
-            // Rows
             data.results.forEach(row => {
                 tableHtml += `<tr>`;
                 row.forEach(cell => {
-                    // format appropriately if it's null
                     const displayVal = cell === null ? '<i>NULL</i>' : String(cell);
                     tableHtml += `<td>${displayVal}</td>`;
                 });

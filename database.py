@@ -1,9 +1,11 @@
 import sqlite3
 import os
 
-DB_NAME = "ecommerce.db"
+DB_DIR = "databases"
+DB_NAME = os.path.join(DB_DIR, "ecommerce.db")
 
 def init_db():
+    os.makedirs(DB_DIR, exist_ok=True)
     if os.path.exists(DB_NAME):
         print(f"Database {DB_NAME} already exists. Skipping initialization.")
         return

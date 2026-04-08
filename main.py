@@ -17,15 +17,20 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 app = FastAPI()
 
 # Database config
-DB_NAME = "ecommerce.db"
+DB_DIR = "databases"
+os.makedirs(DB_DIR, exist_ok=True)
 
 # Mount static directory for frontend
-# We will create 'static' folder later
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class QueryRequest(BaseModel):
     query: str
+    schema_name: str = "ecommerce"
+
+class SchemaCreateRequest(BaseModel):
+    name: str
+    sql_script: str
 
 class QueryResponse(BaseModel):
     sql_query: str
@@ -33,9 +38,35 @@ class QueryResponse(BaseModel):
     columns: list
     message: str = ""
 
-def get_db_schema():
+import re
+
+def is_valid_custom_schema_script(script: str) -> bool:
+    statements = [stmt.strip() for stmt in script.split(';') if stmt.strip()]
+    if not statements:
+        return False
+    
+    forbidden_keywords = [
+        r'\bDROP\b', r'\bDELETE\b', r'\bUPDATE\b', r'\bALTER\b', 
+        r'\bPRAGMA\b', r'\bATTACH\b', r'\bDETACH\b', r'\bEXPLAIN\b', 
+        r'\bVACUUM\b', r'\bREPLACE\b'
+    ]
+    
+    for stmt in statements:
+        if not (stmt.upper().startswith("CREATE") or stmt.upper().startswith("INSERT")):
+            return False
+            
+        for forbidden in forbidden_keywords:
+            if re.search(forbidden, stmt, re.IGNORECASE):
+                return False
+    return True
+
+def get_db_schema(schema_name: str):
     """Retrieve database schema to provide context to the LLM."""
-    conn = sqlite3.connect(DB_NAME)
+    db_path = os.path.join(DB_DIR, f"{schema_name}.db")
+    if not os.path.exists(db_path):
+        raise ValueError(f"Schema '{schema_name}' does not exist.")
+        
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("SELECT name, sql FROM sqlite_master WHERE type='table';")
     tables = cursor.fetchall()
@@ -48,12 +79,13 @@ def get_db_schema():
     
     return "\n\n".join(schema)
 
-def execute_sql(sql_query: str):
+def execute_sql(sql_query: str, schema_name: str):
     """Safely execute a read-only SQL query."""
     if not sql_query.lower().strip().startswith("select"):
         raise ValueError("Only SELECT queries are permitted.")
         
-    conn = sqlite3.connect(DB_NAME)
+    db_path = os.path.join(DB_DIR, f"{schema_name}.db")
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     try:
         cursor.execute(sql_query)
@@ -68,6 +100,70 @@ def read_root():
     """Serve the main frontend page."""
     return FileResponse("static/index.html")
 
+@app.get("/api/schemas")
+def list_schemas():
+    schemas = []
+    for f in os.listdir(DB_DIR):
+        if f.endswith(".db"):
+            schemas.append(f[:-3])
+    return {"schemas": schemas}
+
+@app.post("/api/schemas")
+def create_schema(req: SchemaCreateRequest):
+    if not re.match(r'^[a-zA-Z0-9_]+$', req.name):
+        raise HTTPException(status_code=400, detail="Invalid schema name. Use alphanumeric characters and underscores only.")
+        
+    if not is_valid_custom_schema_script(req.sql_script):
+        raise HTTPException(status_code=400, detail="Invalid SQL script. Only CREATE and INSERT statements are allowed. Destructive commands (DROP, DELETE, etc.) are strictly prohibited.")
+        
+    db_path = os.path.join(DB_DIR, f"{req.name}.db")
+    if os.path.exists(db_path):
+        raise HTTPException(status_code=400, detail=f"Schema '{req.name}' already exists.")
+        
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.executescript(req.sql_script)
+        conn.commit()
+        conn.close()
+        return {"message": f"Schema '{req.name}' created successfully."}
+    except Exception as e:
+        if os.path.exists(db_path):
+            os.remove(db_path)
+        raise HTTPException(status_code=400, detail=f"Error executing schema script: {str(e)}")
+
+@app.get("/api/schema/{name}")
+def get_schema_info(name: str):
+    db_path = os.path.join(DB_DIR, f"{name}.db")
+    if not os.path.exists(db_path):
+        raise HTTPException(status_code=404, detail="Schema not found")
+        
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    tables = cursor.fetchall()
+    
+    schema_info = []
+    for (table_name,) in tables:
+        if table_name == "sqlite_sequence":
+            continue
+        cursor.execute(f"PRAGMA table_info({table_name});")
+        columns = cursor.fetchall()
+        
+        col_info = []
+        for col in columns:
+            cid, col_name, col_type, notnull, dflt_value, pk = col
+            if pk:
+                type_badge = "PK"
+            else:
+                type_badge = col_type.split()[0].upper()[:4] if col_type else "STR"
+            col_info.append({"name": col_name, "type": type_badge})
+            
+        schema_info.append({"name": table_name, "columns": col_info})
+        
+    conn.close()
+    return {"tables": schema_info}
+
 @app.post("/api/query", response_model=QueryResponse)
 def handle_query(req: QueryRequest):
     if not openai.api_key or openai.api_key == 'your_openai_api_key_here':
@@ -77,7 +173,12 @@ def handle_query(req: QueryRequest):
         )
 
     user_query = req.query
-    schema = get_db_schema()
+    schema_name = req.schema_name
+    
+    try:
+        schema = get_db_schema(schema_name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     prompt = f"""
 You are an expert SQL assistant. I will provide you with a database schema and a question in natural language.
@@ -115,7 +216,7 @@ It must be a valid SQLite query. It must only be a SELECT statement.
         if not sql_query.endswith(";"):
             sql_query += ";"
 
-        columns, results = execute_sql(sql_query)
+        columns, results = execute_sql(sql_query, schema_name)
         
         return QueryResponse(
             sql_query=sql_query,

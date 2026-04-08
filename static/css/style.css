@@ -103,7 +103,60 @@ h1, h2, h3, h4 {
     text-transform: uppercase;
     letter-spacing: 1px;
     color: var(--text-secondary);
+    margin: 0;
+}
+
+.schema-viewer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 1rem;
+}
+
+.add-btn {
+    background: transparent;
+    border: none;
+    color: var(--accent-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.2rem;
+    border-radius: 4px;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.add-btn:hover {
+    background: rgba(59, 130, 246, 0.1);
+    transform: scale(1.05);
+}
+
+.schema-selector {
+    margin-bottom: 1.5rem;
+}
+
+.modern-select {
+    width: 100%;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    color: white;
+    font-size: 0.9rem;
+    font-family: var(--font-main);
+    appearance: none;
+    outline: none;
+    cursor: pointer;
+}
+
+.modern-select:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.modern-select option {
+    background: var(--bg-color);
+    color: white;
 }
 
 .table-list {
@@ -473,6 +526,97 @@ h1, h2, h3, h4 {
     }
     
     .primary-btn {
+        padding: 1rem;
+    }
+}
+
+.secondary-btn {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.5rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.secondary-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+}
+
+/* Modal */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-container {
+    width: 90%;
+    max-width: 500px;
+    padding: 2rem;
+    border-radius: 12px;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.schema-form .form-group {
+    margin-bottom: 1.25rem;
+}
+
+.schema-form label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.modal-actions {
+    margin-top: 1.5rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+
+.schema-form textarea.modern-input {
+    resize: vertical;
+    font-family: var(--font-code);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+    .modal-container {
+        padding: 1.5rem;
+        width: 95%;
+    }
+    
+    .modal-actions {
+        flex-direction: column-reverse;
+        gap: 0.75rem;
+    }
+    
+    .secondary-btn, .primary-btn {
+        width: 100%;
         padding: 1rem;
     }
 }
