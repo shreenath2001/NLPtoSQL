@@ -62,8 +62,12 @@ def is_valid_custom_schema_script(script: str) -> bool:
         if not (upper_stmt.startswith("CREATE") or upper_stmt.startswith("INSERT")):
             return False
             
+        # Create a copy for checking that ignores valid constraint phrases
+        stmt_to_check = re.sub(r'\bON\s+DELETE\b', 'ON_DEL_PLACEHOLDER', stmt, flags=re.IGNORECASE)
+        stmt_to_check = re.sub(r'\bON\s+UPDATE\b', 'ON_UPD_PLACEHOLDER', stmt_to_check, flags=re.IGNORECASE)
+
         for forbidden in forbidden_keywords:
-            if re.search(forbidden, stmt, re.IGNORECASE):
+            if re.search(forbidden, stmt_to_check, re.IGNORECASE):
                 return False
     return True
 
