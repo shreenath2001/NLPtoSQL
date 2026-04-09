@@ -528,6 +528,29 @@ h1, h2, h3, h4 {
     .primary-btn {
         padding: 1rem;
     }
+
+    .chat-history {
+        padding: 1rem;
+        gap: 1rem;
+    }
+
+    .bubble {
+        padding: 0.75rem 1rem;
+        font-size: 0.9rem;
+    }
+
+    .message {
+        max-width: 95%;
+    }
+
+    .sql-query {
+        padding: 0.75rem;
+        font-size: 0.85rem;
+    }
+
+    .analysis-block {
+        padding: 1rem;
+    }
 }
 
 .secondary-btn {
