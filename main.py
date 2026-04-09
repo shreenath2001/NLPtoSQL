@@ -33,10 +33,12 @@ class SchemaCreateRequest(BaseModel):
     sql_script: str
 
 class QueryResponse(BaseModel):
-    sql_query: str
-    results: list
-    columns: list
+    sql_query: str = ""
+    results: list = []
+    columns: list = []
     message: str = ""
+    analysis: str = ""
+    chat_response: str = ""
 
 import re
 
@@ -193,8 +195,9 @@ def handle_query(req: QueryRequest):
 
     prompt = f"""
 You are an expert SQL assistant. I will provide you with a database schema and a question in natural language.
-Your task is to respond ONLY with the raw SQL query to answer the question. Do not include markdown formatting (like ```sql), do not include explanations, just the SQL query itself.
-It must be a valid SQLite query. It must only be a SELECT statement.
+If the question can be answered using the provided schema, respond ONLY with the raw SQL query to answer the question. Do not include markdown formatting (like ```sql), do not include explanations, just the SQL query itself. It must be a valid SQLite query and must only be a SELECT statement.
+
+If the question is unrelated to the database, or if it is impossible to generate a meaningful SQL query based on the schema, reply EXACTLY with a conversational response starting with 'CHAT_RESPONSE: '. Explain politely that you can only answer questions related to the current database, and guide them to ask about the available data.
 
 ### Schema:
 {schema}
@@ -217,6 +220,11 @@ It must be a valid SQLite query. It must only be a SELECT statement.
         
         sql_query = response.choices[0].message.content.strip()
         
+        if sql_query.startswith("CHAT_RESPONSE:"):
+            return QueryResponse(
+                chat_response=sql_query.replace("CHAT_RESPONSE:", "").strip()
+            )
+            
         # Remove markdown if the model included it despite instructions
         if sql_query.startswith("```"):
             sql_query = sql_query.split("\n", 1)[1]
@@ -229,11 +237,42 @@ It must be a valid SQLite query. It must only be a SELECT statement.
 
         columns, results = execute_sql(sql_query, schema_name)
         
+        analysis = ""
+        if results:
+            limited_results = results[:50]
+            analysis_prompt = f"""
+You are an expert data analyst. Based on the following user question, SQL query, and gathered results, provide a concise and insightful analysis or summary of the findings. Maintain a helpful and professional tone.
+
+### User Question:
+{user_query}
+
+### SQL Query:
+{sql_query}
+
+### Results (up to 50 rows):
+Columns: {columns}
+Rows: {limited_results}
+"""
+            try:
+                analysis_response = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful data analyst."},
+                        {"role": "user", "content": analysis_prompt}
+                    ],
+                    temperature=0.5
+                )
+                analysis = analysis_response.choices[0].message.content.strip()
+            except Exception as e:
+                print(f"Analysis generation failed: {e}")
+                analysis = ""
+
         return QueryResponse(
             sql_query=sql_query,
             columns=columns,
             results=results,
-            message="Query executed successfully."
+            message="Query executed successfully.",
+            analysis=analysis
         )
 
     except Exception as e:
