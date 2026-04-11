@@ -91,11 +91,29 @@
                     <input type="text" id="schema-name" class="modern-input" required pattern="^[a-zA-Z0-9_]+$"
                         title="Only letters, numbers, and underscores allowed" placeholder="e.g. hr_database" />
                 </div>
-                <div class="form-group">
-                    <label for="schema-script">SQL Script (CREATE & INSERT)</label>
-                    <textarea id="schema-script" class="modern-input" rows="8" required
-                        placeholder="CREATE TABLE employees (id INT);\nINSERT INTO employees VALUES (1);"></textarea>
+
+                <div class="modal-tabs">
+                    <button type="button" class="tab-btn active" data-tab="script">SQL Script</button>
+                    <button type="button" class="tab-btn" data-tab="url">Connection URL</button>
                 </div>
+
+                <div id="tab-script" class="tab-content">
+                    <div class="form-group">
+                        <label for="schema-script">SQL Script (CREATE & INSERT)</label>
+                        <textarea id="schema-script" class="modern-input" rows="8"
+                            placeholder="CREATE TABLE employees (id INT);\nINSERT INTO employees VALUES (1);"></textarea>
+                    </div>
+                </div>
+
+                <div id="tab-url" class="tab-content hidden">
+                    <div class="form-group">
+                        <label for="schema-url">Connection URL</label>
+                        <input type="text" id="schema-url" class="modern-input" 
+                            placeholder="e.g. postgresql://user:pass@localhost:5432/mydb" />
+                        <p class="input-hint">Supports SQLite, PostgreSQL, and MySQL URLs.</p>
+                    </div>
+                </div>
+
                 <div id="schema-error" class="error-text hidden"></div>
                 <div class="modal-actions">
                     <button type="button" class="secondary-btn" id="cancel-schema-btn">Cancel</button>

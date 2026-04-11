@@ -22,6 +22,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const schemaError = document.getElementById('schema-error');
     const saveSchemaBtn = document.getElementById('save-schema-btn');
     const schemaLoader = document.getElementById('schema-loader');
+    const schemaUrlInput = document.getElementById('schema-url');
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+    let activeTab = 'script';
 
     // Mobile Sidebar Elements
     const mobileMenuBtn = document.getElementById('mobile-menu-btn');
@@ -41,11 +45,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Init ---
-    loadSchemas();
+    const lastSelected = localStorage.getItem('lastSelectedSchema') || 'ecommerce';
+    loadSchemas(lastSelected);
 
     // --- Event Listeners ---
     schemaDropdown.addEventListener('change', () => {
-        loadSchemaInfo(schemaDropdown.value);
+        const selected = schemaDropdown.value;
+        localStorage.setItem('lastSelectedSchema', selected);
+        loadSchemaInfo(selected);
     });
 
     addSchemaBtn.addEventListener('click', () => {
@@ -64,13 +71,32 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            activeTab = btn.dataset.tab;
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            tabContents.forEach(content => {
+                if (content.id === `tab-${activeTab}`) {
+                    content.classList.remove('hidden');
+                } else {
+                    content.classList.add('hidden');
+                }
+            });
+        });
+    });
+
     schemaForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         
         const name = schemaNameInput.value.trim();
-        const sql_script = schemaScriptInput.value.trim();
+        const sql_script = activeTab === 'script' ? schemaScriptInput.value.trim() : "";
+        const connection_url = activeTab === 'url' ? schemaUrlInput.value.trim() : "";
         
-        if (!name || !sql_script) return;
+        if (!name) return;
+        if (activeTab === 'script' && !sql_script) return;
+        if (activeTab === 'url' && !connection_url) return;
 
         // Set Loading
         saveSchemaBtn.disabled = true;
@@ -81,7 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/schemas', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, sql_script })
+                body: JSON.stringify({ name, sql_script, connection_url })
             });
 
             const data = await res.json();

@@ -10,4 +10,6 @@ __pycache__/
 *.pyc
 
 # Database
-ecommerce.db
+databases/
+*.db
+*.sqlite
