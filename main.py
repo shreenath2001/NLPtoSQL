@@ -6,6 +6,12 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import openai
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import Column, Integer, String, DateTime
+from datetime import datetime
+import re
+from cryptography.fernet import Fernet
 
 # Load environment variables
 load_dotenv()
@@ -16,9 +22,95 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 # Initialize FastAPI app
 app = FastAPI()
 
+# Base Directory for absolute paths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Database config
-DB_DIR = "databases"
+DB_DIR = os.path.join(BASE_DIR, "databases")
 os.makedirs(DB_DIR, exist_ok=True)
+
+# Registry Configuration (Absolute Path)
+REGISTRY_DB = os.path.join(DB_DIR, "registry.sqlite")
+REGISTRY_URL = f"sqlite:///{REGISTRY_DB}"
+registry_engine = create_engine(REGISTRY_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=registry_engine)
+Base = declarative_base()
+
+# Encryption Configuration
+class Cipher:
+    """Utility for encrypting and decrypting sensitive data."""
+    def __init__(self):
+        self.key = os.getenv("DB_ENCRYPTION_KEY")
+        if not self.key:
+            self.key = Fernet.generate_key().decode()
+            self._save_key_to_env(self.key)
+        self.fernet = Fernet(self.key.encode())
+
+    def _save_key_to_env(self, key: str):
+        env_path = os.path.join(BASE_DIR, ".env")
+        with open(env_path, "a") as f:
+            f.write(f"\nDB_ENCRYPTION_KEY={key}\n")
+        print("Generated new DB_ENCRYPTION_KEY and saved to .env")
+
+    def encrypt(self, data: str) -> str:
+        if not data: return data
+        return self.fernet.encrypt(data.encode()).decode()
+
+    def decrypt(self, token: str) -> str:
+        if not token: return token
+        try:
+            return self.fernet.decrypt(token.encode()).decode()
+        except Exception:
+            # If decryption fails, assume it's already plain text (for migration)
+            return token
+
+cipher = Cipher()
+
+class RegisteredSchema(Base):
+    __tablename__ = "schemas"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)
+    connection_url = Column(String, nullable=False)
+    type = Column(String, nullable=False) # 'local' or 'remote'
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+def init_registry():
+    Base.metadata.create_all(bind=registry_engine)
+    
+    # Migrate existing .db files if any
+    session = SessionLocal()
+    try:
+        # 1. Migrate local files to registry
+        if os.path.exists(DB_DIR):
+            for f in os.listdir(DB_DIR):
+                if f.endswith(".db") and f != "registry.sqlite":
+                    name = f[:-3]
+                    existing = session.query(RegisteredSchema).filter_by(name=name).first()
+                    if not existing:
+                        abs_path = os.path.abspath(os.path.join(DB_DIR, f))
+                        new_schema = RegisteredSchema(
+                            name=name,
+                            connection_url=cipher.encrypt(f"sqlite:///{abs_path}"),
+                            type="local"
+                        )
+                        session.add(new_schema)
+                        print(f"Migrated local schema to registry: {name}")
+        
+        # 2. Migrate existing plaintext URLs to encrypted ones
+        all_schemas = session.query(RegisteredSchema).all()
+        for idx, s in enumerate(all_schemas):
+            # If the URL doesn't look like an encrypted Fernet token (usually starts with gAAAA)
+            # we encrypt it.
+            if not s.connection_url.startswith("gAAAA"):
+                print(f"Encrypting legacy credentials for: {s.name}")
+                s.connection_url = cipher.encrypt(s.connection_url)
+        
+        session.commit()
+    finally:
+        session.close()
+
+# Initialize registry on startup
+init_registry()
 
 # Mount static directory for frontend
 os.makedirs("static", exist_ok=True)
@@ -30,7 +122,8 @@ class QueryRequest(BaseModel):
 
 class SchemaCreateRequest(BaseModel):
     name: str
-    sql_script: str
+    sql_script: str = ""
+    connection_url: str = ""
 
 class QueryResponse(BaseModel):
     sql_query: str = ""
@@ -71,40 +164,68 @@ def is_valid_custom_schema_script(script: str) -> bool:
                 return False
     return True
 
-def get_db_schema(schema_name: str):
-    """Retrieve database schema to provide context to the LLM."""
-    db_path = os.path.join(DB_DIR, f"{schema_name}.db")
-    if not os.path.exists(db_path):
-        raise ValueError(f"Schema '{schema_name}' does not exist.")
+def normalize_connection_url(url: str) -> str:
+    """Automatically inject required drivers for common databases."""
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    if url.startswith("mysql://"):
+        return url.replace("mysql://", "mysql+pymysql://", 1)
+    return url
+
+def get_engine_for_schema(schema_name: str):
+    """Universal connector that handles decryption, driver normalization, and stability flags."""
+    session = SessionLocal()
+    try:
+        registered = session.query(RegisteredSchema).filter_by(name=schema_name).first()
+        if not registered:
+            raise ValueError(f"Schema '{schema_name}' does not exist.")
         
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, sql FROM sqlite_master WHERE type='table';")
-    tables = cursor.fetchall()
-    conn.close()
-    
+        # Decrypt URL before use
+        raw_url = cipher.decrypt(registered.connection_url)
+        url = normalize_connection_url(raw_url)
+        
+        connect_args = {}
+        if url.startswith("sqlite"):
+            connect_args = {"check_same_thread": False}
+            
+        return create_engine(url, connect_args=connect_args, pool_pre_ping=True)
+    finally:
+        session.close()
+
+def get_db_schema(schema_name: str):
+    """Retrieve database schema for LLM context using the universal connector."""
+    try:
+        engine = get_engine_for_schema(schema_name)
+    except ValueError as e:
+        raise e
+        
+    inspector = inspect(engine)
     schema = []
-    for table_name, table_sql in tables:
-        if table_name != "sqlite_sequence":
-            schema.append(f"Table '{table_name}':\n{table_sql}")
+    try:
+        for table_name in inspector.get_table_names():
+            if table_name == "sqlite_sequence": continue
+            columns = inspector.get_columns(table_name)
+            col_strings = [f"{col['name']} ({col['type']})" for col in columns]
+            schema.append(f"Table '{table_name}':\nColumns: {', '.join(col_strings)}")
+    except Exception as e:
+        raise ValueError(f"Error inspecting database: {str(e)}")
     
     return "\n\n".join(schema)
 
 def execute_sql(sql_query: str, schema_name: str):
-    """Safely execute a read-only SQL query."""
+    """Safely execute a read-only SQL query using the universal connector."""
     if not sql_query.lower().strip().startswith("select"):
         raise ValueError("Only SELECT queries are permitted.")
         
-    db_path = os.path.join(DB_DIR, f"{schema_name}.db")
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
     try:
-        cursor.execute(sql_query)
-        columns = [description[0] for description in cursor.description]
-        results = cursor.fetchall()
-        return columns, results
-    finally:
-        conn.close()
+        engine = get_engine_for_schema(schema_name)
+        with engine.connect() as connection:
+            result = connection.execute(text(sql_query))
+            columns = list(result.keys())
+            rows = [list(row) for row in result.fetchall()]
+            return columns, rows
+    except Exception as e:
+        raise ValueError(f"Database error: {str(e)}")
 
 @app.get("/")
 def read_root():
@@ -113,73 +234,106 @@ def read_root():
 
 @app.get("/api/schemas")
 def list_schemas():
-    schemas = []
-    for f in os.listdir(DB_DIR):
-        if f.endswith(".db"):
-            schemas.append(f[:-3])
-    return {"schemas": schemas}
+    session = SessionLocal()
+    try:
+        registered = session.query(RegisteredSchema).all()
+        return {"schemas": [s.name for s in registered]}
+    finally:
+        session.close()
 
 @app.post("/api/schemas")
 def create_schema(req: SchemaCreateRequest):
     if not re.match(r'^[a-zA-Z0-9_]+$', req.name):
         raise HTTPException(status_code=400, detail="Invalid schema name. Use alphanumeric characters and underscores only.")
         
-    if not is_valid_custom_schema_script(req.sql_script):
-        raise HTTPException(status_code=400, detail="Invalid SQL script. Only CREATE and INSERT statements are allowed. Destructive commands (DROP, DELETE, etc.) are strictly prohibited.")
-        
-    db_path = os.path.join(DB_DIR, f"{req.name}.db")
-    if os.path.exists(db_path):
-        raise HTTPException(status_code=400, detail=f"Schema '{req.name}' already exists.")
-        
-    conn = None
+    session = SessionLocal()
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.executescript(req.sql_script)
-        conn.commit()
-        return {"message": f"Schema '{req.name}' created successfully."}
-    except Exception as e:
-        if conn:
-            conn.close()
-            conn = None
-        if os.path.exists(db_path):
-            os.remove(db_path)
-        raise HTTPException(status_code=400, detail=f"Error executing schema script: {str(e)}")
+        existing = session.query(RegisteredSchema).filter_by(name=req.name).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Schema '{req.name}' already exists.")
+
+        if req.connection_url:
+            normalized_url = normalize_connection_url(req.connection_url)
+            
+            # Verify connection before saving
+            try:
+                test_connect_args = {}
+                if normalized_url.startswith("sqlite"):
+                    test_connect_args = {"check_same_thread": False}
+                test_engine = create_engine(normalized_url, connect_args=test_connect_args)
+                with test_engine.connect() as conn:
+                    pass
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Could not connect to database with provided URL: {str(e)}")
+                
+            new_schema = RegisteredSchema(
+                name=req.name,
+                connection_url=cipher.encrypt(req.connection_url),
+                type="remote"
+            )
+            session.add(new_schema)
+            session.commit()
+            return {"message": f"Remote schema '{req.name}' registered successfully (encrypted)."}
+            
+        elif req.sql_script:
+            if not is_valid_custom_schema_script(req.sql_script):
+                raise HTTPException(status_code=400, detail="Invalid SQL script. Only CREATE and INSERT statements are allowed.")
+                
+            db_path = os.path.join(DB_DIR, f"{req.name}.db")
+            if os.path.exists(db_path):
+                raise HTTPException(status_code=400, detail=f"Schema file '{req.name}.db' already exists.")
+                
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.executescript(req.sql_script)
+                conn.commit()
+            except Exception as e:
+                conn.close()
+                if os.path.exists(db_path): os.remove(db_path)
+                raise HTTPException(status_code=400, detail=f"Error executing schema script: {str(e)}")
+            finally:
+                conn.close()
+
+            new_schema = RegisteredSchema(
+                name=req.name,
+                connection_url=cipher.encrypt(f"sqlite:///{os.path.abspath(db_path)}"),
+                type="local"
+            )
+            session.add(new_schema)
+            session.commit()
+            return {"message": f"Local schema '{req.name}' created and registered successfully (encrypted)."}
+        else:
+            raise HTTPException(status_code=400, detail="Either 'sql_script' or 'connection_url' must be provided.")
     finally:
-        if conn:
-            conn.close()
+        session.close()
 
 @app.get("/api/schema/{name}")
-def get_schema_info(name: str):
-    db_path = os.path.join(DB_DIR, f"{name}.db")
-    if not os.path.exists(db_path):
-        raise HTTPException(status_code=404, detail="Schema not found")
+def get_schema_info_api(name: str):
+    """Retrieve schema info API using the universal connector with robust error handling."""
+    try:
+        engine = get_engine_for_schema(name)
+        inspector = inspect(engine)
         
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-    tables = cursor.fetchall()
-    
-    schema_info = []
-    for (table_name,) in tables:
-        if table_name == "sqlite_sequence":
-            continue
-        cursor.execute(f"PRAGMA table_info({table_name});")
-        columns = cursor.fetchall()
-        
-        col_info = []
-        for col in columns:
-            cid, col_name, col_type, notnull, dflt_value, pk = col
-            if pk:
-                type_badge = "PK"
-            else:
-                type_badge = col_type.split()[0].upper()[:4] if col_type else "STR"
-            col_info.append({"name": col_name, "type": type_badge})
+        schema_info = []
+        tables = inspector.get_table_names()
+        for table_name in tables:
+            if table_name == "sqlite_sequence": continue
             
-        schema_info.append({"name": table_name, "columns": col_info})
-        
-    conn.close()
-    return {"tables": schema_info}
+            columns = inspector.get_columns(table_name)
+            col_info = []
+            for col in columns:
+                # Basic PK and type detection
+                type_badge = str(col['type']).split('(')[0].upper()[:4]
+                if col.get('primary_key'): type_badge = "PK"
+                col_info.append({"name": col['name'], "type": type_badge})
+                
+            schema_info.append({"name": table_name, "columns": col_info})
+        return {"tables": schema_info}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        # Prevent 500 error by returning a descriptive 400 error
+        raise HTTPException(status_code=400, detail=f"Connection Error: {str(e)}")
 
 @app.post("/api/query", response_model=QueryResponse)
 def handle_query(req: QueryRequest):
